@@ -1,0 +1,162 @@
+@echo off
+chcp 65001 >nul
+title bOs Windows Installer
+color 0A
+cls
+
+echo ╔══════════════════════════════════╗
+echo ║        bOs Windows Installer     ║
+echo ║    Minimal Batch OS v2.1         ║
+echo ╚══════════════════════════════════╝
+echo.
+
+:: Check if curl is available
+where curl >nul 2>nul
+if %errorlevel% neq 0 (
+    echo ❌ ERROR: curl is not installed!
+    echo.
+    echo Installing curl...
+    bitsadmin /transfer "DownloadCurl" /download /priority normal ^
+    "https://curl.se/windows/dl-7.87.0_4/curl-7.87.0_4-win64-mingw.zip" ^
+    "%TEMP%\curl.zip"
+    
+    if not exist "%TEMP%\curl.zip" (
+        echo Failed to download curl. Please install manually:
+        echo 1. Download from: https://curl.se/windows/
+        echo 2. Add curl.exe to PATH
+        pause
+        exit /b 1
+    )
+    
+    powershell -Command "Expand-Archive -Path '%TEMP%\curl.zip' -DestinationPath '%TEMP%\curl' -Force" >nul 2>nul
+    copy "%TEMP%\curl\curl-7.87.0_4-win64-mingw\bin\curl.exe" "%SystemRoot%\System32\" >nul 2>nul
+    del "%TEMP%\curl.zip" >nul 2>nul
+    rmdir /s /q "%TEMP%\curl" >nul 2>nul
+    echo ✅ curl installed successfully!
+    echo.
+)
+
+:: Installation directory
+set INSTALL_DIR=%USERPROFILE%\bos
+set BACKUP_DIR=%USERPROFILE%\bos_backup_%date:~-4%%date:~3,2%%date:~0,2%_%time:~0,2%%time:~3,2%
+
+:: Check existing installation
+if exist "%INSTALL_DIR%" (
+    echo ⚠  Existing bOs installation found at:
+    echo    %INSTALL_DIR%
+    echo.
+    set /p choice=Backup and replace? [Y/n]: 
+    if /i "%choice%" neq "n" (
+        echo.
+        echo Backing up to: %BACKUP_DIR%
+        xcopy "%INSTALL_DIR%" "%BACKUP_DIR%" /E /I /H /Y >nul 2>nul
+        rmdir /s /q "%INSTALL_DIR%" 2>nul
+        echo ✅ Backup created
+    ) else (
+        echo Installation cancelled.
+        pause
+        exit /b
+    )
+    echo.
+)
+
+:: Download bOs
+echo 📦 Downloading bOs from GitHub...
+echo.
+
+:: Create temp directory
+set TEMP_DIR=%TEMP%\bos_download_%RANDOM%
+mkdir "%TEMP_DIR%" >nul 2>nul
+cd /d "%TEMP_DIR%"
+
+:: Method 1: Try using git if available
+where git >nul 2>nul
+if %errorlevel% equ 0 (
+    echo Using git clone...
+    git clone --quiet https://github.com/smashgamer312/bos.git 2>nul
+    if exist bos (
+        echo ✅ Downloaded via git
+        goto :EXTRACT
+    )
+)
+
+:: Method 2: Download ZIP via curl
+echo Using curl to download ZIP...
+curl -L -s -o bos.zip "https://github.com/smashgamer312/bos/archive/refs/heads/main.zip"
+
+if not exist bos.zip (
+    echo ❌ Download failed!
+    echo.
+    echo Alternative download methods:
+    echo 1. Manually download from:
+    echo    https://github.com/smashgamer312/bos
+    echo 2. Extract to: %INSTALL_DIR%
+    pause
+    exit /b 1
+)
+
+:: Extract ZIP
+echo 📂 Extracting files...
+powershell -Command "Expand-Archive -Path 'bos.zip' -DestinationPath '.' -Force" >nul 2>nul
+
+if exist bos-main (
+    rename bos-main bos
+)
+
+:EXTRACT
+:: Verify download
+if not exist bos (
+    echo ❌ Extraction failed!
+    pause
+    exit /b 1
+)
+
+:: Move to installation directory
+echo 📁 Installing to: %INSTALL_DIR%
+xcopy bos "%INSTALL_DIR%" /E /I /H /Y >nul 2>nul
+
+:: Cleanup
+cd /d "%USERPROFILE%"
+rmdir /s /q "%TEMP_DIR%" >nul 2>nul
+
+:: Create desktop shortcut (optional)
+echo.
+set /p choice=Create desktop shortcut? [Y/n]: 
+if /i "%choice%" neq "n" (
+    (
+        echo [InternetShortcut]
+        echo URL=file:///%INSTALL_DIR%/BOOT.BAT
+        echo IconFile=%SystemRoot%\System32\SHELL32.dll
+        echo IconIndex=290
+        echo HotKey=0
+        echo IDList=
+    ) > "%USERPROFILE%\Desktop\bOs.url"
+    echo ✅ Desktop shortcut created
+)
+
+:: Final steps
+echo.
+echo ========================================
+echo ✅ bOs installed successfully!
+echo.
+echo Location: %INSTALL_DIR%
+echo.
+echo To start bOs:
+echo 1. Open Command Prompt
+echo 2. Type: cd %INSTALL_DIR%
+echo 3. Type: BOOT.BAT
+echo.
+echo Or double-click BOOT.BAT in the folder
+echo ========================================
+echo.
+
+:: Launch bOs?
+set /p choice=Launch bOs now? [Y/n]: 
+if /i "%choice%" neq "n" (
+    echo Starting bOs...
+    timeout /t 2 /nobreak >nul
+    cd /d "%INSTALL_DIR%"
+    call BOOT.BAT
+)
+
+pause
